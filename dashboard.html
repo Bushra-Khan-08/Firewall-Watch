@@ -1,0 +1,100 @@
+{% macro tbl(id, title, cols, data, cc=[], labels={}) %}
+<section class="card"><header><h3>{{ title }}</h3>
+<input placeholder="Search {{ title|lower }}..." oninput="apply('{{ id }}')"></header>
+<div class="sc"><table id="{{ id }}"><tr>{% for c in cols %}<th>{{ labels.get(c, c.replace('_',' ')) }}</th>{% endfor %}</tr>
+{% for r in data %}<tr>{% for c in cols %}<td{% if c in cc %} class="{{ r[c]|string|lower }}"{% endif %}>{{ r[c] }}</td>{% endfor %}</tr>{% endfor %}
+</table></div></section>
+{% endmacro %}
+<!doctype html><html><head><meta charset="utf-8"><title>Security Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(e){}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#eef1f5;--card:#fff;--text:#0f1b2d;--muted:#667;--line:#e3e6ea;--head:#0f1b2d;--input:#fff;--inputb:#bbc;--red:#d61f26;--amber:#b86200;--green:#1a7f37}
+[data-theme=dark]{--bg:#0b1220;--card:#141d2f;--text:#e6ebf5;--muted:#93a0b8;--line:#243049;--head:#1d2a44;--input:#0f1729;--inputb:#33415f;--red:#ff6b70;--amber:#f5a300;--green:#3fb96a}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Segoe UI,system-ui,sans-serif}
+/* Navbar always stays light so the dark-colored logo is visible in both themes */
+nav{background:#ffffff;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #d61f26;gap:12px}
+.brand img{height:38px;display:block}
+nav a{color:#0f1b2d}nav .right{display:flex;gap:14px;align-items:center;color:#0f1b2d}
+#tg{width:36px;height:36px;border-radius:50%;border:1px solid #bbc;background:transparent;color:#0f1b2d;cursor:pointer;font-size:16px}
+main{padding:20px;max-width:1400px;margin:auto}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:16px}
+.card{background:var(--card);border-radius:8px;padding:16px;margin-bottom:16px}
+.card h3{margin:0 0 10px;font-size:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+header input{padding:7px;border:1px solid var(--inputb);border-radius:4px;width:240px;margin-bottom:8px;background:var(--input);color:var(--text)}
+.sc{max-height:300px;overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th{position:sticky;top:0;background:var(--head);color:#fff;text-align:left;padding:7px;text-transform:capitalize;white-space:nowrap}
+td{padding:6px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.failed,td.high,td.blocked,td.medium{color:var(--amber);font-weight:600}
+td.locked,td.critical,td.dropped,td.denied,td.suspicious{color:var(--red);font-weight:600}
+td.success,td.allowed,td.low,td.clean{color:var(--green);font-weight:600}
+tr.grp{cursor:pointer}tr.grp:hover td{background:rgba(128,128,128,.08)}
+tr.grp.open td:first-child{font-weight:600}
+table.inner{width:100%;border-collapse:collapse;margin:4px 0 10px;font-size:12px}
+table.inner th{position:static;background:transparent;color:var(--muted);padding:4px 7px;border-bottom:1px solid var(--line)}
+table.inner td{padding:4px 7px;white-space:nowrap}
+</style></head><body>
+<nav><span class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="Company logo"></span>
+<span class="right"><button id="tg" onclick="toggleTheme()" title="Toggle theme"></button>Logged in as admin <a href="/logout">Logout</a></span></nav>
+<main>
+<div class="charts">
+{% for id,t in [('a','Authentication Events'),('b','Blocked / Denied Traffic'),('cc','Traffic by Country')] %}
+<div class="card"><h3>{{ t }}</h3><canvas id="{{ id }}" height="200"></canvas></div>{% endfor %}
+</div>
+<div class="charts">
+{% for id,t in [('l','Admin vs Other Login Attempts'),('cb','Top Destination Countries')] %}
+<div class="card"><h3>{{ t }}</h3><canvas id="{{ id }}" height="160"></canvas></div>{% endfor %}
+</div>
+<section class="card"><header><h3>Authentication Logs</h3>
+<input placeholder="Search authentication logs..." oninput="applyAuth()"></header>
+<div class="sc"><table id="t1"><tr><th>source ip</th><th>attempts</th><th>success</th><th>failed</th><th>locked</th><th>last seen</th></tr>
+{% for g in auth_groups %}
+<tr class="grp" onclick="toggleGrp(this)"><td>&#9656; {{ g.ip }}</td><td>{{ g.logs|length }}</td>
+<td class="success">{{ g.success }}</td><td class="failed">{{ g.failed }}</td><td class="locked">{{ g.locked }}</td>
+<td>{{ g.latest_time }}</td></tr>
+<tr class="det" style="display:none"><td colspan="6"><table class="inner"><tr><th>date</th><th>time</th><th>user</th><th>status</th></tr>
+{% for l in g.logs %}<tr><td>{{ l.date }}</td><td>{{ l.time }}</td><td>{{ l.user }}</td><td class="{{ l.status|lower }}">{{ l.status }}</td></tr>{% endfor %}
+</table></td></tr>
+{% endfor %}
+</table></div></section>
+{{ tbl('t2','High Severity Alerts',['date','time','alert_type','severity','source_ip','details'],alerts,['severity']) }}
+{{ tbl('t3','Firewall Logs',['date_time','src_ip','src_port','dst_ip','dst_port','action','app','forti_risk','vt_risk','malicious','dst_country','service','sent','rcvd','policy'],fw,['action','forti_risk','malicious'],{'malicious':'VT verdict','vt_risk':'VT risk score','forti_risk':'FortiGuard risk'}) }}
+</main>
+<script>
+const col={Success:'#1a7f37',Failed:'#f5a300',Locked:'#d61f26',
+ Allowed:'#1a7f37',Blocked:'#f5a300',Denied:'#7b2cbf',Dropped:'#5b6a86',Others:'#888',
+ 'Admin logins':'#1a7f37','Other login attempts':'#d61f26'};
+const palette=['#0f1b2d','#d61f26','#2b6cb0','#1a7f37','#f5a300','#7b2cbf','#5b6a86','#c2185b','#00838f'];
+function pick(labels){return labels.map((l,i)=>col[l]||palette[i%palette.length])}
+const charts=[];
+function txt(){return getComputedStyle(document.documentElement).getPropertyValue('--text')}
+Chart.defaults.color=txt();
+function donut(id,d){const k=Object.keys(d);charts.push(new Chart(id,{type:'doughnut',
+ data:{labels:k,datasets:[{data:Object.values(d),backgroundColor:pick(k),borderColor:'transparent'}]},
+ options:{plugins:{legend:{position:'right'}}}}))}
+function bar(id,d,color){const k=Object.keys(d);charts.push(new Chart(id,{type:'bar',
+ data:{labels:k,datasets:[{data:Object.values(d),backgroundColor:color||pick(k)}]},
+ options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}}))}
+donut('a',{{ c_auth|tojson }});
+donut('b',{{ c_block|tojson }});
+donut('cc',{{ c_country|tojson }});
+bar('l',{{ c_login|tojson }},['#1a7f37','#d61f26']);
+bar('cb',{{ c_country_bar|tojson }});
+function lab(){tg.textContent=document.documentElement.dataset.theme=='dark'?'\u2600':'\ud83c\udf19'}
+function toggleTheme(){const n=document.documentElement.dataset.theme=='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('theme',n)}catch(e){}
+ lab();Chart.defaults.color=txt();charts.forEach(c=>{if(c.options.plugins.legend)c.options.plugins.legend.labels={color:txt()};c.update()})}
+function apply(id){const t=document.getElementById(id),q=t.closest('section').querySelector('input').value.toLowerCase();
+ t.querySelectorAll('tr').forEach((r,n)=>{if(n)r.style.display=r.textContent.toLowerCase().includes(q)?'':'none'})}
+function toggleGrp(tr){const open=tr.classList.toggle('open');tr.nextElementSibling.style.display=open?'':'none';
+ tr.firstElementChild.innerHTML=(open?'&#9662; ':'&#9656; ')+tr.dataset.ip}
+document.querySelectorAll('#t1 tr.grp').forEach(tr=>{tr.dataset.ip=tr.firstElementChild.textContent.replace('\u25B6','').trim()})
+function applyAuth(){const q=document.querySelector('#t1').closest('section').querySelector('input').value.toLowerCase();
+ document.querySelectorAll('#t1 tr.grp').forEach(g=>{const det=g.nextElementSibling,match=(g.textContent+det.textContent).toLowerCase().includes(q);
+  g.style.display=match?'':'none';
+  if(q&&match){g.classList.add('open');det.style.display='';g.firstElementChild.innerHTML='&#9662; '+g.dataset.ip}
+  else if(!q){g.classList.remove('open');det.style.display='none';g.firstElementChild.innerHTML='&#9656; '+g.dataset.ip}})}
+lab();
+setInterval(()=>{if(![...document.querySelectorAll('header input')].some(i=>i.value))location.reload()},15000);
+</script></body></html>
